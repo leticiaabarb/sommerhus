@@ -1,0 +1,38 @@
+SÅDAN LÆGGER DU DINE EGNE BILLEDER PÅ SIDEN
+============================================
+
+1. Læg dine fotos i DENNE mappe ("billeder").
+
+2. Navngiv dem med tal:
+      1.jpg
+      2.jpg
+      3.jpg
+      ... og så videre (op til 24).
+
+   Siden finder dem automatisk og viser dem i galleriet i rækkefølge.
+   Rækkefølgen bestemmes af tallet (1 vises først).
+
+3. Vil du have et stort billede øverst på siden (bag titlen)?
+   Kald det:
+      hero.jpg
+   Vælg et flot, bredt billede af huset eller omgivelserne.
+
+TILLADTE FILTYPER
+-----------------
+   .jpg   .jpeg   .png
+   (Billeder fra iPhone i "HEIC"-format virker IKKE i browsere –
+    gem/eksporter dem som JPG først. På iPhone: del billedet og vælg
+    "Gem som JPEG", eller skift kamera-format under Indstillinger > Kamera.)
+
+GODE RÅD
+--------
+   - Hold hver fil under ca. 1-2 MB, så siden loader hurtigt.
+     (Store billeder kan gøres mindre gratis på fx https://squoosh.app)
+   - Liggende (bredformat) billeder ser bedst ud i galleriet.
+   - Du behøver ikke bruge alle 24 pladser – læg bare det antal du har.
+
+NÅR DU LÆGGER SIDEN ONLINE
+--------------------------
+   Husk at tage HELE mappen med (index.html, admin.html OG billeder-mappen),
+   når du trækker den til Netlify eller uploader til dit webhotel.
+   Så følger billederne med.

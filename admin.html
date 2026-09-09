@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bøgelunde – Admin: Ledige dage</title>
+<style>
+  :root{--grøn:#3f7d5c;--grøn-mørk:#2f5d44;--sand:#f5f1e8;--kant:#e2dccd;--tekst:#2c2c2c;--grå:#8a8578}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;color:var(--tekst);background:var(--sand);line-height:1.6}
+  header{background:var(--grøn-mørk);color:#fff;padding:32px 20px;text-align:center}
+  header h1{margin:0;font-size:1.7rem}
+  header p{margin:6px 0 0;opacity:.85;font-size:.95rem}
+  .wrap{max-width:760px;margin:0 auto;padding:24px 20px 60px}
+  .kort{background:#fff;border:1px solid var(--kant);border-radius:14px;padding:24px;margin-top:20px}
+  h2{margin:0 0 14px;font-size:1.2rem;color:var(--grøn-mørk)}
+  .kal-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .kal-top button{background:var(--sand);border:1px solid var(--kant);border-radius:8px;width:40px;height:40px;font-size:1.1rem;cursor:pointer}
+  .kal-top button:hover{background:var(--kant)}
+  .kal-titel{font-weight:600;font-size:1.1rem;text-transform:capitalize}
+  .grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px}
+  .dag-navn{text-align:center;font-size:.78rem;color:var(--grå);padding:4px 0;text-transform:uppercase}
+  .dag{aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:9px;font-size:.95rem;border:1px solid var(--kant);cursor:pointer;user-select:none;background:#fff}
+  .dag.tom{visibility:hidden;border:none}
+  .dag.fortid{color:#d5d0c4;cursor:default;background:#faf8f3;border-color:transparent}
+  .dag.ledig{background:#3f7d5c;color:#fff;border-color:#3f7d5c;font-weight:600}
+  .dag:not(.fortid):hover{border-color:var(--grøn)}
+  .forklaring{font-size:.85rem;color:var(--grå);margin-top:14px}
+  .knap{background:var(--grøn);color:#fff;border:none;border-radius:10px;padding:13px 22px;font-size:1rem;font-weight:600;cursor:pointer}
+  .knap:hover{background:var(--grøn-mørk)}
+  .knap.grå{background:#eee;color:#555}
+  .rad{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px;align-items:center}
+  input{padding:11px 12px;border:1px solid var(--kant);border-radius:9px;font-size:1rem}
+  .besked{padding:12px;border-radius:9px;margin-top:14px;display:none}
+  .besked.ok{background:#e4f2e9;color:var(--grøn-mørk);display:block}
+  .besked.fejl{background:#fbe9e7;color:#b3392c;display:block}
+  #login{max-width:400px;margin:60px auto}
+  .demo-mærke{background:#fff4d6;border:1px solid #f0dfa8;color:#8a6d1e;padding:8px 14px;border-radius:8px;font-size:.85rem;text-align:center;margin-top:14px;display:none}
+  .tæller{font-weight:600;color:var(--grøn-mørk)}
+</style>
+</head>
+<body>
+<header>
+  <h1>Bøgelunde · Admin</h1>
+  <p>Marker hvilke dage huset er ledigt</p>
+</header>
+
+<div class="wrap">
+  <!-- Login -->
+  <div class="kort" id="login">
+    <h2>Log ind</h2>
+    <p style="color:var(--grå);margin-top:-6px">Indtast din admin-adgangskode.</p>
+    <div class="rad">
+      <input id="kode" type="password" placeholder="Adgangskode" style="flex:1">
+      <button class="knap" id="loginKnap">Log ind</button>
+    </div>
+    <div class="besked" id="loginSvar"></div>
+  </div>
+
+  <!-- Panel -->
+  <div id="panel" style="display:none">
+    <div class="kort">
+      <h2>Klik for at gøre dage ledige / optagede</h2>
+      <div class="kal-top">
+        <button id="forrige">‹</button>
+        <div class="kal-titel" id="kalTitel"></div>
+        <button id="næste">›</button>
+      </div>
+      <div class="grid" id="dagNavne"></div>
+      <div class="grid" id="kalender"></div>
+      <div class="forklaring">Grøn = ledig (vises på hjemmesiden). Klik en dag for at skifte. <span class="tæller" id="tæller"></span></div>
+      <div class="demo-mærke" id="demoMærke">Demo-tilstand: gemmes kun i denne browser. Sæt backend op for at dele med hjemmesiden.</div>
+      <div class="rad">
+        <button class="knap" id="gemKnap">Gem ændringer</button>
+        <button class="knap grå" id="ryd">Ryd hele måneden</button>
+        <button class="knap grå" id="fyld">Gør hele måneden ledig</button>
+      </div>
+      <div class="besked" id="gemSvar"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const CONFIG = {
+  backendUrl: "https://script.google.com/macros/s/AKfycbwYGLQU1nNtuVSJVySBc1ddFX1l6NKxeVm6Hf191wkXTXwfFCgfnKkei7FmkFfALdeG/exec",       // samme URL som i index.html (se OPSAETNING.md)
+  demoKode: "boegelunde" // KUN til demo-tilstand. Rigtig kode sættes i Code.gs.
+};
+
+const pad=n=>String(n).padStart(2,"0");
+const iso=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const iDag=new Date(); iDag.setHours(0,0,0,0);
+const MÅNEDER=["januar","februar","marts","april","maj","juni","juli","august","september","oktober","november","december"];
+const DAGNAVNE=["man","tir","ons","tor","fre","lør","søn"];
+
+let ledige=new Set();
+let visMåned=new Date(iDag.getFullYear(),iDag.getMonth(),1);
+let adgangskode="";
+
+/* ---------- Login ---------- */
+document.getElementById("loginKnap").onclick=login;
+document.getElementById("kode").addEventListener("keydown",e=>{if(e.key==="Enter")login();});
+async function login(){
+  adgangskode=document.getElementById("kode").value;
+  const svar=document.getElementById("loginSvar");
+  if(CONFIG.backendUrl){
+    try{
+      const r=await fetch(CONFIG.backendUrl+"?action=availability&token="+encodeURIComponent(adgangskode)+"&admin=1");
+      const data=await r.json();
+      if(data.error){ svar.textContent="Forkert adgangskode."; svar.className="besked fejl"; return; }
+      ledige=new Set(data.available||[]);
+    }catch(e){ svar.textContent="Kunne ikke forbinde til backend."; svar.className="besked fejl"; return; }
+  } else {
+    if(adgangskode!==CONFIG.demoKode){ svar.textContent="Forkert adgangskode (demo: boegelunde)."; svar.className="besked fejl"; return; }
+    const gemt=localStorage.getItem("bogelunde_ledige");
+    ledige=new Set(gemt?JSON.parse(gemt):[]);
+    document.getElementById("demoMærke").style.display="block";
+  }
+  document.getElementById("login").style.display="none";
+  document.getElementById("panel").style.display="block";
+  tegnDagNavne(); tegn();
+}
+
+/* ---------- Kalender ---------- */
+function tegnDagNavne(){
+  document.getElementById("dagNavne").innerHTML=DAGNAVNE.map(d=>`<div class="dag-navn">${d}</div>`).join("");
+}
+function tegn(){
+  document.getElementById("kalTitel").textContent=MÅNEDER[visMåned.getMonth()]+" "+visMåned.getFullYear();
+  const el=document.getElementById("kalender"); el.innerHTML="";
+  const først=(new Date(visMåned).getDay()+6)%7;
+  const antal=new Date(visMåned.getFullYear(),visMåned.getMonth()+1,0).getDate();
+  for(let i=0;i<først;i++){const t=document.createElement("div");t.className="dag tom";el.appendChild(t);}
+  for(let dag=1;dag<=antal;dag++){
+    const d=new Date(visMåned.getFullYear(),visMåned.getMonth(),dag);
+    const key=iso(d);
+    const c=document.createElement("div"); c.className="dag"; c.textContent=dag;
+    if(d<iDag){ c.classList.add("fortid"); }
+    else{
+      if(ledige.has(key)) c.classList.add("ledig");
+      c.onclick=()=>{ ledige.has(key)?ledige.delete(key):ledige.add(key); tegn(); };
+    }
+    el.appendChild(c);
+  }
+  document.getElementById("tæller").textContent=`(${ledige.size} ledige dage i alt)`;
+}
+document.getElementById("forrige").onclick=()=>{visMåned.setMonth(visMåned.getMonth()-1);tegn();};
+document.getElementById("næste").onclick=()=>{visMåned.setMonth(visMåned.getMonth()+1);tegn();};
+
+/* Ryd / fyld kun den viste måned */
+function månedsdage(){
+  const arr=[]; const antal=new Date(visMåned.getFullYear(),visMåned.getMonth()+1,0).getDate();
+  for(let dag=1;dag<=antal;dag++){const d=new Date(visMåned.getFullYear(),visMåned.getMonth(),dag); if(d>=iDag) arr.push(iso(d));}
+  return arr;
+}
+document.getElementById("ryd").onclick=()=>{ månedsdage().forEach(k=>ledige.delete(k)); tegn(); };
+document.getElementById("fyld").onclick=()=>{ månedsdage().forEach(k=>ledige.add(k)); tegn(); };
+
+/* ---------- Gem ---------- */
+document.getElementById("gemKnap").onclick=async()=>{
+  const svar=document.getElementById("gemSvar");
+  const dates=[...ledige].sort();
+  if(CONFIG.backendUrl){
+    try{
+      await fetch(CONFIG.backendUrl,{
+        method:"POST",headers:{"Content-Type":"text/plain;charset=utf-8"},
+        body:JSON.stringify({action:"setAvailability",token:adgangskode,dates})
+      });
+      svar.textContent="Gemt! Ændringerne er nu live på hjemmesiden."; svar.className="besked ok";
+    }catch(e){ svar.textContent="Kunne ikke gemme. Prøv igen."; svar.className="besked fejl"; }
+  } else {
+    localStorage.setItem("bogelunde_ledige",JSON.stringify(dates));
+    svar.textContent="Gemt lokalt (demo). Åbn index.html i samme browser for at se det."; svar.className="besked ok";
+  }
+};
+</script>
+</body>
+</html>
