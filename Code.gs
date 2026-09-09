@@ -12,6 +12,7 @@
 const ADMIN_KODE   = "SKIFT_MIG";                 // din hemmelige admin-adgangskode
 const MODTAGER_MAIL = "simonroel1984@gmail.com, leticiabarbosaa98@gmail.com";  // hvor booking-anmodninger sendes hen
 const HUS_NAVN     = "Bøgelunde";
+const AIRBNB_ICAL  = "";   // UDFYLDES KUN I APPS SCRIPT – aldrig i denne fil (repoet er offentligt)
 
 /* ---------------------------------------------------------------------
    Intern: find/opret faner i regnearket
@@ -26,6 +27,7 @@ function ark(navn, kolonner){
   return s;
 }
 function ledigeArk(){ return ark("Ledige", ["dato"]); }
+function airbnbArk(){ return ark("AirbnbBlokeret", ["dato"]); }
 function bookingArk(){ return ark("Bookinger",
   ["tidspunkt","navn","email","telefon","gæster","ankomst","afrejse","besked","status"]); }
 
@@ -39,11 +41,13 @@ function doGet(e){
     if(p.admin === "1" && p.token !== ADMIN_KODE){
       return json({error:"unauthorized"});
     }
-    const s = ledigeArk();
-    const værdier = s.getLastRow() > 1
-      ? s.getRange(2,1,s.getLastRow()-1,1).getValues().flat().map(String).filter(Boolean)
-      : [];
-    return json({available: værdier});
+    const ledige = læsDatoer(ledigeArk());
+    if(p.admin === "1"){
+      // admin ser sine egne markeringer uændret + hvad Airbnb blokerer
+      return json({available: ledige, airbnb: læsDatoer(airbnbArk())});
+    }
+    const blokeret = new Set(læsDatoer(airbnbArk()));
+    return json({available: ledige.filter(d => !blokeret.has(d))});
   }
   return json({ok:true, hus:HUS_NAVN});
 }
@@ -115,6 +119,71 @@ ${d.besked || "(ingen)"}
 function antalNætter(a,b){
   if(!a||!b) return "";
   return Math.round((new Date(b)-new Date(a))/86400000);
+}
+
+/* ---------------------------------------------------------------------
+   Datoer: læs en kolonne som "yyyy-MM-dd", uanset om Sheets har
+   gemt værdien som tekst eller som en rigtig dato.
+   --------------------------------------------------------------------- */
+function tilDato(v){
+  if(v instanceof Date) return Utilities.formatDate(v, "UTC", "yyyy-MM-dd");
+  return String(v).trim();
+}
+function læsDatoer(s){
+  if(s.getLastRow() < 2) return [];
+  return s.getRange(2,1,s.getLastRow()-1,1).getValues().flat().map(tilDato).filter(Boolean);
+}
+
+/* ---------------------------------------------------------------------
+   Airbnb-synkronisering
+   Kører hver time via en tidsudløser og gemmer alle nætter, der er
+   booket eller blokeret på Airbnb, i fanen "AirbnbBlokeret".
+   --------------------------------------------------------------------- */
+function opdaterAirbnb(){
+  if(!AIRBNB_ICAL){ console.log("AIRBNB_ICAL er ikke sat – springer over."); return; }
+
+  const svar = UrlFetchApp.fetch(AIRBNB_ICAL, {muteHttpExceptions:true});
+  if(svar.getResponseCode() !== 200){
+    console.log("Kunne ikke hente Airbnb-kalenderen. HTTP " + svar.getResponseCode());
+    return;   // vigtigt: behold de gamle datoer frem for at tømme fanen
+  }
+
+  const datoer = parseIcalNætter(svar.getContentText());
+  if(!datoer.length){
+    console.log("Airbnb-feedet indeholdt ingen datoer – beholder de gamle.");
+    return;
+  }
+
+  const s = airbnbArk();
+  s.clearContents();
+  s.appendRow(["dato"]);
+  const r = s.getRange(2,1,datoer.length,1);
+  r.setNumberFormat("@");                       // gem som tekst, ikke som dato
+  r.setValues(datoer.map(d => [d]));
+  console.log("Airbnb: " + datoer.length + " blokerede nætter gemt.");
+}
+
+/* Træk alle blokerede nætter ud af et iCal-feed.
+   DTEND er afrejsedagen og tælles IKKE med – den nat er fri.       */
+function parseIcalNætter(ical){
+  const linjer = ical.replace(/\r\n[ \t]/g, "").split(/\r?\n/);
+  const ude = new Set();
+  let start = null, slut = null;
+  for(const l of linjer){
+    if(l.indexOf("BEGIN:VEVENT") === 0){ start = null; slut = null; continue; }
+    const mS = l.match(/^DTSTART[^:]*:(\d{4})(\d{2})(\d{2})/);
+    if(mS){ start = Date.UTC(+mS[1], +mS[2]-1, +mS[3]); continue; }
+    const mE = l.match(/^DTEND[^:]*:(\d{4})(\d{2})(\d{2})/);
+    if(mE){ slut = Date.UTC(+mE[1], +mE[2]-1, +mE[3]); continue; }
+    if(l.indexOf("END:VEVENT") === 0 && start !== null){
+      const sidste = (slut !== null) ? slut : start + 86400000;
+      for(let t = start; t < sidste; t += 86400000){
+        ude.add(Utilities.formatDate(new Date(t), "UTC", "yyyy-MM-dd"));
+      }
+      start = null; slut = null;
+    }
+  }
+  return Array.from(ude).sort();
 }
 
 /* ---------------------------------------------------------------------
